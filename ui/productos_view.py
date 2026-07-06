@@ -1,11 +1,13 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-    QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFrame
+    QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFrame,
+    QDialog, QFormLayout, QDoubleSpinBox, QSpinBox, QTextEdit
 )
 from PyQt5.QtCore import Qt
 
-from models.producto_model import obtener_productos, eliminar_producto
+from models.producto_model import obtener_productos, eliminar_producto, registrar_producto
 from models.categoria_model import obtener_categorias
+from models.proveedor_model import obtener_proveedores
 from ui import estilos
 
 
@@ -44,6 +46,7 @@ class ProductosView(QWidget):
         self.btn_nuevo = QPushButton("+  New product")
         self.btn_nuevo.setCursor(Qt.PointingHandCursor)
         self.btn_nuevo.setStyleSheet(estilos.BOTON_PRIMARIO)
+        self.btn_nuevo.clicked.connect(self.abrir_formulario_nuevo)
         header_layout.addWidget(self.btn_nuevo, alignment=Qt.AlignTop)
 
         layout.addLayout(header_layout)
@@ -149,3 +152,121 @@ class ProductosView(QWidget):
                 self.cargar_productos()
             else:
                 QMessageBox.warning(self, "Error", mensaje)
+
+    def abrir_formulario_nuevo(self):
+        dialogo = FormularioProducto(self)
+        if dialogo.exec_() == QDialog.Accepted:
+            self.cargar_categorias()
+            self.cargar_productos()
+
+class FormularioProducto(QDialog):
+    """Ventana emergente para registrar un nuevo producto (RF01)."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Nuevo producto")
+        self.setMinimumWidth(420)
+        self.setStyleSheet(f"background-color: {estilos.FONDO};")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        titulo = QLabel("Registrar nuevo producto")
+        titulo.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {estilos.VERDE_OSCURO};")
+        layout.addWidget(titulo)
+        layout.addSpacing(10)
+
+        form_layout = QFormLayout()
+        form_layout.setSpacing(10)
+
+        self.input_nombre = QLineEdit()
+        self.input_nombre.setStyleSheet(estilos.INPUT)
+        form_layout.addRow("Nombre*:", self.input_nombre)
+
+        self.combo_categoria = QComboBox()
+        self.combo_categoria.setStyleSheet(estilos.INPUT)
+        for id_cat, nombre, _ in obtener_categorias():
+            self.combo_categoria.addItem(nombre, id_cat)
+        form_layout.addRow("Categoría:", self.combo_categoria)
+
+        self.combo_proveedor = QComboBox()
+        self.combo_proveedor.setStyleSheet(estilos.INPUT)
+        for id_prov, nombre, *_ in obtener_proveedores():
+            self.combo_proveedor.addItem(nombre, id_prov)
+        form_layout.addRow("Proveedor:", self.combo_proveedor)
+
+        self.input_talla = QLineEdit()
+        self.input_talla.setStyleSheet(estilos.INPUT)
+        self.input_talla.setPlaceholderText("Ej: M, 30, Única")
+        form_layout.addRow("Talla:", self.input_talla)
+
+        self.input_color = QLineEdit()
+        self.input_color.setStyleSheet(estilos.INPUT)
+        form_layout.addRow("Color:", self.input_color)
+
+        self.spin_precio_compra = QDoubleSpinBox()
+        self.spin_precio_compra.setMaximum(999999)
+        self.spin_precio_compra.setPrefix("$ ")
+        self.spin_precio_compra.setStyleSheet(estilos.INPUT)
+        form_layout.addRow("Precio de compra:", self.spin_precio_compra)
+
+        self.spin_precio_venta = QDoubleSpinBox()
+        self.spin_precio_venta.setMaximum(999999)
+        self.spin_precio_venta.setPrefix("$ ")
+        self.spin_precio_venta.setStyleSheet(estilos.INPUT)
+        form_layout.addRow("Precio de venta*:", self.spin_precio_venta)
+
+        self.spin_cantidad = QSpinBox()
+        self.spin_cantidad.setMaximum(99999)
+        self.spin_cantidad.setStyleSheet(estilos.INPUT)
+        form_layout.addRow("Cantidad inicial*:", self.spin_cantidad)
+
+        self.input_descripcion = QTextEdit()
+        self.input_descripcion.setStyleSheet(estilos.INPUT)
+        self.input_descripcion.setMaximumHeight(70)
+        form_layout.addRow("Descripción:", self.input_descripcion)
+
+        layout.addLayout(form_layout)
+        layout.addSpacing(14)
+
+        btn_guardar = QPushButton("Guardar")
+        btn_guardar.setStyleSheet(estilos.BOTON_PRIMARIO)
+        btn_guardar.setCursor(Qt.PointingHandCursor)
+        btn_guardar.clicked.connect(self.guardar)
+
+        btn_cancelar = QPushButton("Cancelar")
+        btn_cancelar.setStyleSheet(estilos.BOTON_SECUNDARIO)
+        btn_cancelar.setCursor(Qt.PointingHandCursor)
+        btn_cancelar.clicked.connect(self.reject)
+
+        botones_layout = QHBoxLayout()
+        botones_layout.addStretch()
+        botones_layout.addWidget(btn_cancelar)
+        botones_layout.addWidget(btn_guardar)
+        layout.addLayout(botones_layout)
+
+    def guardar(self):
+        nombre = self.input_nombre.text().strip()
+        precio_venta = self.spin_precio_venta.value()
+        cantidad = self.spin_cantidad.value()
+
+        if not nombre or precio_venta <= 0:
+            QMessageBox.warning(self, "Error", "El nombre y el precio de venta son obligatorios")
+            return
+
+        ok, resultado = registrar_producto(
+            nombre=nombre,
+            id_categoria=self.combo_categoria.currentData(),
+            talla=self.input_talla.text().strip() or None,
+            color=self.input_color.text().strip() or None,
+            precio_compra=self.spin_precio_compra.value(),
+            precio_venta=precio_venta,
+            cantidad_inicial=cantidad,
+            id_proveedor=self.combo_proveedor.currentData(),
+            descripcion=self.input_descripcion.toPlainText().strip()
+        )
+
+        if ok:
+            QMessageBox.information(self, "Éxito", f"Producto registrado exitosamente con SKU: {resultado}")
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Error al registrar producto", resultado)

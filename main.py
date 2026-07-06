@@ -12,6 +12,9 @@ from ui import estilos
 from ui.clientes_view import ClientesView
 from ui.ventas_view import VentasView
 from ui.proveedores_view import ProveedoresView
+from ui.promociones_view import PromocionesView
+from ui.reportes_view import ReportesView
+from ui.backup_view import BackupView
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -80,12 +83,20 @@ class MainWindow(QMainWindow):
         self.pantalla_clientes = ClientesView()
         self.pantalla_ventas = VentasView()
         self.pantalla_proveedores = ProveedoresView()
+        self.pantalla_promociones = PromocionesView()
+        self.pantalla_reportes = ReportesView()
+        self.pantalla_backup = BackupView()
 
         self.stack.addWidget(self.pantalla_home)       # índice 0
         self.stack.addWidget(self.pantalla_productos)  # índice 1
         self.stack.addWidget(self.pantalla_clientes)   # índice 2
         self.stack.addWidget(self.pantalla_ventas)     # índice 3
         self.stack.addWidget(self.pantalla_proveedores)  # índice 4
+        self.stack.addWidget(self.pantalla_promociones)  # índice 5
+        self.stack.addWidget(self.pantalla_reportes)     # índice 6
+        self.stack.addWidget(self.pantalla_backup)       # índice 7
+        
+
 
         opciones = [
             ("Home", 0),
@@ -93,9 +104,9 @@ class MainWindow(QMainWindow):
             ("Clients", 2),
             ("Sales", 3),
             ("Suppliers", 4),
-            ("Promotions", None),
-            ("Reports", None),
-            ("Backup", None),
+            ("Promotions", 5),
+            ("Reports", 6),
+            ("Backup", 7),
         ]
         for nombre, indice in opciones:
             boton = QPushButton(nombre)
