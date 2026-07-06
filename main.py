@@ -11,7 +11,7 @@ from ui.productos_view import ProductosView
 from ui import estilos
 from ui.clientes_view import ClientesView
 from ui.ventas_view import VentasView
-
+from ui.proveedores_view import ProveedoresView
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -79,18 +79,20 @@ class MainWindow(QMainWindow):
         self.pantalla_productos = ProductosView()
         self.pantalla_clientes = ClientesView()
         self.pantalla_ventas = VentasView()
+        self.pantalla_proveedores = ProveedoresView()
 
         self.stack.addWidget(self.pantalla_home)       # índice 0
         self.stack.addWidget(self.pantalla_productos)  # índice 1
         self.stack.addWidget(self.pantalla_clientes)   # índice 2
         self.stack.addWidget(self.pantalla_ventas)     # índice 3
+        self.stack.addWidget(self.pantalla_proveedores)  # índice 4
 
         opciones = [
             ("Home", 0),
             ("Products", 1),
             ("Clients", 2),
             ("Sales", 3),
-            ("Suppliers", None),
+            ("Suppliers", 4),
             ("Promotions", None),
             ("Reports", None),
             ("Backup", None),
