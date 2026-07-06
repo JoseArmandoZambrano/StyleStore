@@ -9,6 +9,7 @@ from PyQt5.QtGui import QFont
 from database.db_setup import crear_tablas
 from ui.productos_view import ProductosView
 from ui import estilos
+from ui.clientes_view import ClientesView
 
 
 class MainWindow(QMainWindow):
@@ -75,14 +76,16 @@ class MainWindow(QMainWindow):
         self.pantalla_home.setStyleSheet(f"font-size: 20px; color: {estilos.VERDE_OSCURO}; padding: 28px;")
         self.pantalla_home.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.pantalla_productos = ProductosView()
+        self.pantalla_clientes = ClientesView()
 
         self.stack.addWidget(self.pantalla_home)       # índice 0
         self.stack.addWidget(self.pantalla_productos)  # índice 1
+        self.stack.addWidget(self.pantalla_clientes)   # índice 2
 
         opciones = [
             ("Home", 0),
             ("Products", 1),
-            ("Clients", None),
+            ("Clients", 2),
             ("Sales", None),
             ("Suppliers", None),
             ("Promotions", None),

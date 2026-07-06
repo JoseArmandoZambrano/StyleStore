@@ -22,7 +22,6 @@ class ProductosView(QWidget):
         layout.setContentsMargins(28, 28, 28, 20)
         layout.setSpacing(10)
 
-        # ---- Encabezado ----
         header_layout = QHBoxLayout()
         titulo_box = QVBoxLayout()
         titulo_box.setSpacing(2)
@@ -50,7 +49,6 @@ class ProductosView(QWidget):
         layout.addLayout(header_layout)
         layout.addSpacing(6)
 
-        # ---- Buscador y filtro ----
         filtros_layout = QHBoxLayout()
         filtros_layout.setSpacing(10)
 
@@ -69,8 +67,8 @@ class ProductosView(QWidget):
 
         layout.addLayout(filtros_layout)
 
-        # ---- Tabla dentro de una "tarjeta" ----
-        tarjeta = QFrameConTarjeta()
+        tarjeta = QWidget()
+        tarjeta.setStyleSheet(estilos.TARJETA)
         tarjeta_layout = QVBoxLayout(tarjeta)
         tarjeta_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -151,10 +149,3 @@ class ProductosView(QWidget):
                 self.cargar_productos()
             else:
                 QMessageBox.warning(self, "Error", mensaje)
-
-
-class QFrameConTarjeta(QWidget):
-    """Widget contenedor con estilo de tarjeta blanca redondeada."""
-    def __init__(self):
-        super().__init__()
-        self.setStyleSheet(estilos.TARJETA)
