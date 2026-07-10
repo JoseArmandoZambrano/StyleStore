@@ -1,4 +1,5 @@
 from database.db_setup import crear_conexion
+import csv
 
 
 def reporte_ventas_por_periodo(fecha_inicio, fecha_fin):
@@ -39,3 +40,39 @@ def reporte_bajo_stock(umbral=5):
     resultado = cursor.fetchall()
     conexion.close()
     return resultado
+
+
+def exportar_ventas_a_csv(ventas, ruta_archivo):
+    """
+    Exporta la lista de ventas a un archivo CSV en la ruta indicada.
+    Retorna (True, ruta) o (False, mensaje_error).
+    """
+    try:
+        with open(ruta_archivo, mode="w", newline="", encoding="utf-8-sig") as archivo:
+            escritor = csv.writer(archivo)
+            escritor.writerow(["ID Venta", "Fecha", "Cliente", "Total", "Método de pago"])
+            total_acumulado = 0
+            for id_venta, fecha, cliente, total, metodo_pago in ventas:
+                escritor.writerow([id_venta, fecha, cliente, f"{total:.2f}", metodo_pago or "-"])
+                total_acumulado += total
+            escritor.writerow([])
+            escritor.writerow(["", "", "TOTAL ACUMULADO:", f"{total_acumulado:.2f}", ""])
+        return True, ruta_archivo
+    except Exception as e:
+        return False, str(e)
+
+
+def exportar_bajo_stock_a_csv(productos, ruta_archivo):
+    """
+    Exporta el reporte de bajo stock a un archivo CSV en la ruta indicada.
+    Retorna (True, ruta) o (False, mensaje_error).
+    """
+    try:
+        with open(ruta_archivo, mode="w", newline="", encoding="utf-8-sig") as archivo:
+            escritor = csv.writer(archivo)
+            escritor.writerow(["SKU", "Nombre", "Categoría", "Talla", "Color", "Stock", "Proveedor"])
+            for sku, nombre, categoria, talla, color, stock, proveedor in productos:
+                escritor.writerow([sku, nombre, categoria or "-", talla or "-", color or "-", stock, proveedor or "-"])
+        return True, ruta_archivo
+    except Exception as e:
+        return False, str(e)

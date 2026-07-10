@@ -5,7 +5,10 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
-from models.proveedor_model import registrar_proveedor, obtener_proveedores
+from models.proveedor_model import (
+    registrar_proveedor, obtener_proveedores, modificar_proveedor,
+    eliminar_proveedor, obtener_proveedor_por_id
+)
 from ui import estilos
 
 
@@ -55,8 +58,10 @@ class ProveedoresView(QWidget):
         tarjeta_layout.setContentsMargins(0, 0, 0, 0)
 
         self.tabla = QTableWidget()
-        self.tabla.setColumnCount(5)
-        self.tabla.setHorizontalHeaderLabels(["Nombre", "Contacto", "Teléfono", "Correo", "Dirección"])
+        self.tabla.setColumnCount(7)
+        self.tabla.setHorizontalHeaderLabels(
+            ["Nombre", "Contacto", "Teléfono", "Correo", "Dirección", "Editar", "Eliminar"]
+        )
         self.tabla.setStyleSheet(estilos.TABLA)
         self.tabla.setShowGrid(False)
         self.tabla.verticalHeader().setVisible(False)
@@ -85,25 +90,60 @@ class ProveedoresView(QWidget):
             self.tabla.setItem(fila_idx, 3, QTableWidgetItem(correo or "-"))
             self.tabla.setItem(fila_idx, 4, QTableWidgetItem(direccion or "-"))
 
+            btn_editar = QPushButton("Editar")
+            btn_editar.setCursor(Qt.PointingHandCursor)
+            btn_editar.setStyleSheet(estilos.BOTON_SECUNDARIO)
+            btn_editar.clicked.connect(lambda checked, pid=id_proveedor: self.abrir_formulario_editar(pid))
+            self.tabla.setCellWidget(fila_idx, 5, btn_editar)
+
+            btn_eliminar = QPushButton("Eliminar")
+            btn_eliminar.setCursor(Qt.PointingHandCursor)
+            btn_eliminar.setStyleSheet(estilos.BOTON_PELIGRO)
+            btn_eliminar.clicked.connect(lambda checked, pid=id_proveedor: self.confirmar_eliminar(pid))
+            self.tabla.setCellWidget(fila_idx, 6, btn_eliminar)
+
         self.label_contador.setText(f"{len(proveedores)} proveedores registrados")
 
     def abrir_formulario_nuevo(self):
-        dialogo = FormularioProveedor(self)
+        dialogo = FormularioProveedor(self, id_proveedor=None)
         if dialogo.exec_() == QDialog.Accepted:
             self.cargar_proveedores()
 
+    def abrir_formulario_editar(self, id_proveedor):
+        dialogo = FormularioProveedor(self, id_proveedor=id_proveedor)
+        if dialogo.exec_() == QDialog.Accepted:
+            self.cargar_proveedores()
+
+    def confirmar_eliminar(self, id_proveedor):
+        respuesta = QMessageBox.question(
+            self, "Confirmar eliminación",
+            "¿Seguro que deseas eliminar este proveedor?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if respuesta == QMessageBox.Yes:
+            ok, mensaje = eliminar_proveedor(id_proveedor)
+            if ok:
+                QMessageBox.information(self, "Éxito", mensaje)
+                self.cargar_proveedores()
+            else:
+                QMessageBox.warning(self, "No se pudo eliminar", mensaje)
+
 
 class FormularioProveedor(QDialog):
-    def __init__(self, parent=None):
+    """Ventana emergente para registrar o editar un proveedor."""
+    def __init__(self, parent=None, id_proveedor=None):
         super().__init__(parent)
-        self.setWindowTitle("Nuevo proveedor")
+        self.id_proveedor = id_proveedor
+        self.modo_edicion = id_proveedor is not None
+
+        self.setWindowTitle("Editar proveedor" if self.modo_edicion else "Nuevo proveedor")
         self.setMinimumWidth(380)
         self.setStyleSheet(f"background-color: {estilos.FONDO};")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        titulo = QLabel("Registrar nuevo proveedor")
+        titulo = QLabel("Editar proveedor" if self.modo_edicion else "Registrar nuevo proveedor")
         titulo.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {estilos.VERDE_OSCURO};")
         layout.addWidget(titulo)
         layout.addSpacing(10)
@@ -134,7 +174,7 @@ class FormularioProveedor(QDialog):
         layout.addLayout(form_layout)
         layout.addSpacing(14)
 
-        btn_guardar = QPushButton("Guardar")
+        btn_guardar = QPushButton("Guardar cambios" if self.modo_edicion else "Guardar")
         btn_guardar.setStyleSheet(estilos.BOTON_PRIMARIO)
         btn_guardar.setCursor(Qt.PointingHandCursor)
         btn_guardar.clicked.connect(self.guardar)
@@ -150,6 +190,20 @@ class FormularioProveedor(QDialog):
         botones_layout.addWidget(btn_guardar)
         layout.addLayout(botones_layout)
 
+        if self.modo_edicion:
+            self.cargar_datos_proveedor()
+
+    def cargar_datos_proveedor(self):
+        datos = obtener_proveedor_por_id(self.id_proveedor)
+        if datos is None:
+            return
+        id_proveedor, nombre, contacto, telefono, correo, direccion = datos
+        self.input_nombre.setText(nombre or "")
+        self.input_contacto.setText(contacto or "")
+        self.input_telefono.setText(telefono or "")
+        self.input_correo.setText(correo or "")
+        self.input_direccion.setText(direccion or "")
+
     def guardar(self):
         nombre = self.input_nombre.text().strip()
         contacto = self.input_contacto.text().strip()
@@ -161,9 +215,19 @@ class FormularioProveedor(QDialog):
             QMessageBox.warning(self, "Error", "El nombre es obligatorio")
             return
 
-        ok, resultado = registrar_proveedor(nombre, contacto or None, telefono or None, correo or None, direccion or None)
-        if ok:
-            QMessageBox.information(self, "Éxito", "Proveedor registrado exitosamente")
-            self.accept()
+        if self.modo_edicion:
+            ok, resultado = modificar_proveedor(
+                self.id_proveedor, nombre, contacto or None, telefono or None, correo or None, direccion or None
+            )
+            if ok:
+                QMessageBox.information(self, "Éxito", resultado)
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Error al actualizar proveedor", resultado)
         else:
-            QMessageBox.warning(self, "Error al registrar proveedor", resultado)
+            ok, resultado = registrar_proveedor(nombre, contacto or None, telefono or None, correo or None, direccion or None)
+            if ok:
+                QMessageBox.information(self, "Éxito", "Proveedor registrado exitosamente")
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Error al registrar proveedor", resultado)

@@ -15,6 +15,7 @@ from ui.proveedores_view import ProveedoresView
 from ui.promociones_view import PromocionesView
 from ui.reportes_view import ReportesView
 from ui.backup_view import BackupView
+from ui.home_view import HomeView
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -76,9 +77,7 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
 
-        self.pantalla_home = QLabel("Bienvenido a StyleStore\n\nLa base de datos y el sistema ya están funcionando.")
-        self.pantalla_home.setStyleSheet(f"font-size: 20px; color: {estilos.VERDE_OSCURO}; padding: 28px;")
-        self.pantalla_home.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.pantalla_home = HomeView(ir_a_pantalla_callback=self.ir_a_pantalla_desde_home)
         self.pantalla_productos = ProductosView()
         self.pantalla_clientes = ClientesView()
         self.pantalla_ventas = VentasView()
@@ -130,12 +129,21 @@ class MainWindow(QMainWindow):
 
     def cambiar_pantalla(self, indice, nombre):
         self.stack.setCurrentIndex(indice)
+        if indice == 0:
+            self.pantalla_home.cargar_datos()
         for nombre_boton, boton in self.botones_sidebar.items():
             if nombre_boton == nombre:
                 boton.setStyleSheet(estilos.BOTON_SIDEBAR_ACTIVO)
             else:
                 boton.setStyleSheet(estilos.BOTON_SIDEBAR)
 
+    def ir_a_pantalla_desde_home(self, indice):
+        nombres_por_indice = {v: k for k, v in dict(
+            [("Home", 0), ("Products", 1), ("Clients", 2), ("Sales", 3),
+             ("Suppliers", 4), ("Promotions", 5), ("Reports", 6), ("Backup", 7)]
+        ).items()}
+        nombre = nombres_por_indice.get(indice, "Home")
+        self.cambiar_pantalla(indice, nombre)
 
 if __name__ == "__main__":
     crear_tablas()

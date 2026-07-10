@@ -23,6 +23,61 @@ def registrar_cliente(nombre, apellido, telefono, correo):
         conexion.close()
 
 
+def modificar_cliente(id_cliente, nombre, apellido, telefono, correo):
+    """Modifica los datos de un cliente existente."""
+    if not nombre:
+        return False, "El nombre es obligatorio"
+
+    conexion = crear_conexion()
+    cursor = conexion.cursor()
+    try:
+        cursor.execute("""
+            UPDATE cliente
+            SET nombre = ?, apellido = ?, telefono = ?, correo = ?
+            WHERE id_cliente = ?
+        """, (nombre, apellido, telefono, correo, id_cliente))
+        conexion.commit()
+        return True, "Cliente actualizado exitosamente"
+    except Exception as e:
+        if "UNIQUE constraint failed" in str(e):
+            return False, "El teléfono o correo ya está registrado por otro cliente"
+        return False, str(e)
+    finally:
+        conexion.close()
+
+
+def eliminar_cliente(id_cliente):
+    """Elimina un cliente. Si tiene ventas asociadas, no se puede eliminar (integridad referencial)."""
+    conexion = crear_conexion()
+    cursor = conexion.cursor()
+    try:
+        cursor.execute("SELECT COUNT(*) FROM venta WHERE id_cliente = ?", (id_cliente,))
+        total_ventas = cursor.fetchone()[0]
+        if total_ventas > 0:
+            return False, f"No se puede eliminar: el cliente tiene {total_ventas} venta(s) registrada(s)"
+
+        cursor.execute("DELETE FROM cliente WHERE id_cliente = ?", (id_cliente,))
+        conexion.commit()
+        return True, "Cliente eliminado exitosamente"
+    except Exception as e:
+        return False, str(e)
+    finally:
+        conexion.close()
+
+
+def obtener_cliente_por_id(id_cliente):
+    """Obtiene un solo cliente por su id, para precargar el formulario de edición."""
+    conexion = crear_conexion()
+    cursor = conexion.cursor()
+    cursor.execute("""
+        SELECT id_cliente, nombre, apellido, telefono, correo
+        FROM cliente WHERE id_cliente = ?
+    """, (id_cliente,))
+    resultado = cursor.fetchone()
+    conexion.close()
+    return resultado
+
+
 def obtener_clientes(texto_busqueda=None):
     """Consulta clientes (RF05), con número de compras realizadas por cada uno."""
     conexion = crear_conexion()

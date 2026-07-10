@@ -1,11 +1,14 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QDialog,
-    QFormLayout, QDialogButtonBox
+    QFormLayout
 )
 from PyQt5.QtCore import Qt
 
-from models.cliente_model import registrar_cliente, obtener_clientes, obtener_historial_compras
+from models.cliente_model import (
+    registrar_cliente, obtener_clientes, obtener_historial_compras,
+    modificar_cliente, eliminar_cliente, obtener_cliente_por_id
+)
 from ui import estilos
 
 
@@ -21,7 +24,6 @@ class ClientesView(QWidget):
         layout.setContentsMargins(28, 28, 28, 20)
         layout.setSpacing(10)
 
-        # ---- Encabezado ----
         header_layout = QHBoxLayout()
         titulo_box = QVBoxLayout()
         titulo_box.setSpacing(2)
@@ -50,7 +52,6 @@ class ClientesView(QWidget):
         layout.addLayout(header_layout)
         layout.addSpacing(6)
 
-        # ---- Buscador ----
         self.input_busqueda = QLineEdit()
         self.input_busqueda.setPlaceholderText("Search clients...")
         self.input_busqueda.setStyleSheet(estilos.INPUT)
@@ -59,15 +60,14 @@ class ClientesView(QWidget):
         self.input_busqueda.textChanged.connect(self.cargar_clientes)
         layout.addWidget(self.input_busqueda)
 
-        # ---- Tarjeta con tabla ----
         tarjeta = QWidget()
         tarjeta.setStyleSheet(estilos.TARJETA)
         tarjeta_layout = QVBoxLayout(tarjeta)
         tarjeta_layout.setContentsMargins(0, 0, 0, 0)
 
         self.tabla = QTableWidget()
-        self.tabla.setColumnCount(5)
-        self.tabla.setHorizontalHeaderLabels(["Nombre", "Teléfono", "Correo", "Compras", "Acciones"])
+        self.tabla.setColumnCount(7)
+        self.tabla.setHorizontalHeaderLabels(["Nombre", "Teléfono", "Correo", "Compras", "History", "Editar", "Eliminar"])
         self.tabla.setStyleSheet(estilos.TABLA)
         self.tabla.setShowGrid(False)
         self.tabla.verticalHeader().setVisible(False)
@@ -105,12 +105,43 @@ class ClientesView(QWidget):
             btn_historial.clicked.connect(lambda checked, cid=id_cliente, cnombre=nombre_completo: self.ver_historial(cid, cnombre))
             self.tabla.setCellWidget(fila_idx, 4, btn_historial)
 
+            btn_editar = QPushButton("Editar")
+            btn_editar.setCursor(Qt.PointingHandCursor)
+            btn_editar.setStyleSheet(estilos.BOTON_SECUNDARIO)
+            btn_editar.clicked.connect(lambda checked, cid=id_cliente: self.abrir_formulario_editar(cid))
+            self.tabla.setCellWidget(fila_idx, 5, btn_editar)
+
+            btn_eliminar = QPushButton("Eliminar")
+            btn_eliminar.setCursor(Qt.PointingHandCursor)
+            btn_eliminar.setStyleSheet(estilos.BOTON_PELIGRO)
+            btn_eliminar.clicked.connect(lambda checked, cid=id_cliente: self.confirmar_eliminar(cid))
+            self.tabla.setCellWidget(fila_idx, 6, btn_eliminar)
+
         self.label_contador.setText(f"{len(clientes)} clientes mostrados")
 
     def abrir_formulario_nuevo(self):
-        dialogo = FormularioCliente(self)
+        dialogo = FormularioCliente(self, id_cliente=None)
         if dialogo.exec_() == QDialog.Accepted:
             self.cargar_clientes()
+
+    def abrir_formulario_editar(self, id_cliente):
+        dialogo = FormularioCliente(self, id_cliente=id_cliente)
+        if dialogo.exec_() == QDialog.Accepted:
+            self.cargar_clientes()
+
+    def confirmar_eliminar(self, id_cliente):
+        respuesta = QMessageBox.question(
+            self, "Confirmar eliminación",
+            "¿Seguro que deseas eliminar este cliente?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if respuesta == QMessageBox.Yes:
+            ok, mensaje = eliminar_cliente(id_cliente)
+            if ok:
+                QMessageBox.information(self, "Éxito", mensaje)
+                self.cargar_clientes()
+            else:
+                QMessageBox.warning(self, "No se pudo eliminar", mensaje)
 
     def ver_historial(self, id_cliente, nombre_cliente):
         compras = obtener_historial_compras(id_cliente)
@@ -126,17 +157,20 @@ class ClientesView(QWidget):
 
 
 class FormularioCliente(QDialog):
-    """Ventana emergente para registrar un nuevo cliente."""
-    def __init__(self, parent=None):
+    """Ventana emergente para registrar o editar un cliente."""
+    def __init__(self, parent=None, id_cliente=None):
         super().__init__(parent)
-        self.setWindowTitle("Nuevo cliente")
+        self.id_cliente = id_cliente
+        self.modo_edicion = id_cliente is not None
+
+        self.setWindowTitle("Editar cliente" if self.modo_edicion else "Nuevo cliente")
         self.setMinimumWidth(360)
         self.setStyleSheet(f"background-color: {estilos.FONDO};")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        titulo = QLabel("Registrar nuevo cliente")
+        titulo = QLabel("Editar cliente" if self.modo_edicion else "Registrar nuevo cliente")
         titulo.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {estilos.VERDE_OSCURO};")
         layout.addWidget(titulo)
         layout.addSpacing(10)
@@ -163,8 +197,7 @@ class FormularioCliente(QDialog):
         layout.addLayout(form_layout)
         layout.addSpacing(14)
 
-        botones = QDialogButtonBox()
-        btn_guardar = QPushButton("Guardar")
+        btn_guardar = QPushButton("Guardar cambios" if self.modo_edicion else "Guardar")
         btn_guardar.setStyleSheet(estilos.BOTON_PRIMARIO)
         btn_guardar.setCursor(Qt.PointingHandCursor)
         btn_guardar.clicked.connect(self.guardar)
@@ -180,6 +213,19 @@ class FormularioCliente(QDialog):
         botones_layout.addWidget(btn_guardar)
         layout.addLayout(botones_layout)
 
+        if self.modo_edicion:
+            self.cargar_datos_cliente()
+
+    def cargar_datos_cliente(self):
+        datos = obtener_cliente_por_id(self.id_cliente)
+        if datos is None:
+            return
+        id_cliente, nombre, apellido, telefono, correo = datos
+        self.input_nombre.setText(nombre or "")
+        self.input_apellido.setText(apellido or "")
+        self.input_telefono.setText(telefono or "")
+        self.input_correo.setText(correo or "")
+
     def guardar(self):
         nombre = self.input_nombre.text().strip()
         apellido = self.input_apellido.text().strip()
@@ -190,9 +236,17 @@ class FormularioCliente(QDialog):
             QMessageBox.warning(self, "Error", "El nombre es obligatorio")
             return
 
-        ok, resultado = registrar_cliente(nombre, apellido, telefono or None, correo or None)
-        if ok:
-            QMessageBox.information(self, "Éxito", "Cliente registrado exitosamente")
-            self.accept()
+        if self.modo_edicion:
+            ok, resultado = modificar_cliente(self.id_cliente, nombre, apellido, telefono or None, correo or None)
+            if ok:
+                QMessageBox.information(self, "Éxito", resultado)
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Error al actualizar cliente", resultado)
         else:
-            QMessageBox.warning(self, "Error al registrar cliente", resultado)
+            ok, resultado = registrar_cliente(nombre, apellido, telefono or None, correo or None)
+            if ok:
+                QMessageBox.information(self, "Éxito", "Cliente registrado exitosamente")
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Error al registrar cliente", resultado)

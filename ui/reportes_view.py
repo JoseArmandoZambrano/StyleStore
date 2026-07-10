@@ -1,10 +1,15 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QDateEdit,
-    QSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget
+    QSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
+    QFileDialog, QMessageBox
 )
 from PyQt5.QtCore import Qt, QDate
+from datetime import datetime
 
-from models.reporte_model import reporte_ventas_por_periodo, reporte_bajo_stock
+from models.reporte_model import (
+    reporte_ventas_por_periodo, reporte_bajo_stock,
+    exportar_ventas_a_csv, exportar_bajo_stock_a_csv
+)
 from ui import estilos
 
 
@@ -12,6 +17,8 @@ class ReportesView(QWidget):
     def __init__(self):
         super().__init__()
         self.setStyleSheet(f"background-color: {estilos.FONDO};")
+        self.ventas_actuales = []
+        self.stock_actual = []
         self.init_ui()
 
     def init_ui(self):
@@ -41,9 +48,7 @@ class ReportesView(QWidget):
                 padding: 8px 18px; margin-right: 4px; border-radius: 8px 8px 0 0;
                 font-size: 13px; color: #666;
             }}
-            QTabBar::tab:selected {{
-                background: {estilos.VERDE_OSCURO}; color: white;
-            }}
+            QTabBar::tab:selected {{ background: {estilos.VERDE_OSCURO}; color: white; }}
         """)
 
         tabs.addTab(self._crear_tab_ventas(), "Ventas por periodo")
@@ -78,6 +83,14 @@ class ReportesView(QWidget):
         btn_generar.setStyleSheet(estilos.BOTON_PRIMARIO)
         btn_generar.clicked.connect(self.generar_reporte_ventas)
         filtros_layout.addWidget(btn_generar)
+
+        self.btn_exportar_ventas = QPushButton("⬇  Exportar a CSV")
+        self.btn_exportar_ventas.setCursor(Qt.PointingHandCursor)
+        self.btn_exportar_ventas.setStyleSheet(estilos.BOTON_SECUNDARIO)
+        self.btn_exportar_ventas.clicked.connect(self.exportar_ventas)
+        self.btn_exportar_ventas.setEnabled(False)
+        filtros_layout.addWidget(self.btn_exportar_ventas)
+
         filtros_layout.addStretch()
 
         layout.addLayout(filtros_layout)
@@ -110,11 +123,11 @@ class ReportesView(QWidget):
         fecha_inicio = self.fecha_inicio.date().toString("yyyy-MM-dd")
         fecha_fin = self.fecha_fin.date().toString("yyyy-MM-dd")
 
-        ventas = reporte_ventas_por_periodo(fecha_inicio, fecha_fin)
+        self.ventas_actuales = reporte_ventas_por_periodo(fecha_inicio, fecha_fin)
 
         self.tabla_ventas.setRowCount(0)
         total_acumulado = 0
-        for fila_idx, venta in enumerate(ventas):
+        for fila_idx, venta in enumerate(self.ventas_actuales):
             id_venta, fecha, cliente, total, metodo_pago = venta
             self.tabla_ventas.insertRow(fila_idx)
             self.tabla_ventas.setItem(fila_idx, 0, QTableWidgetItem(str(id_venta)))
@@ -124,7 +137,28 @@ class ReportesView(QWidget):
             self.tabla_ventas.setItem(fila_idx, 4, QTableWidgetItem(metodo_pago or "-"))
             total_acumulado += total
 
-        self.label_total_periodo.setText(f"Total acumulado: ${total_acumulado:.2f} ({len(ventas)} ventas)")
+        self.label_total_periodo.setText(f"Total acumulado: ${total_acumulado:.2f} ({len(self.ventas_actuales)} ventas)")
+        self.btn_exportar_ventas.setEnabled(len(self.ventas_actuales) > 0)
+
+    def exportar_ventas(self):
+        if not self.ventas_actuales:
+            QMessageBox.information(self, "Sin datos", "Genera el reporte antes de exportarlo.")
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_sugerido = f"reporte_ventas_{timestamp}.csv"
+
+        ruta_archivo, _ = QFileDialog.getSaveFileName(
+            self, "Guardar reporte de ventas", nombre_sugerido, "Archivo CSV (*.csv)"
+        )
+        if not ruta_archivo:
+            return
+
+        ok, resultado = exportar_ventas_a_csv(self.ventas_actuales, ruta_archivo)
+        if ok:
+            QMessageBox.information(self, "Reporte exportado", f"El reporte se guardó exitosamente en:\n{resultado}")
+        else:
+            QMessageBox.warning(self, "Error al exportar", resultado)
 
     def _crear_tab_stock(self):
         widget = QWidget()
@@ -149,6 +183,14 @@ class ReportesView(QWidget):
         btn_generar.setStyleSheet(estilos.BOTON_PRIMARIO)
         btn_generar.clicked.connect(self.generar_reporte_stock)
         filtros_layout.addWidget(btn_generar)
+
+        self.btn_exportar_stock = QPushButton("⬇  Exportar a CSV")
+        self.btn_exportar_stock.setCursor(Qt.PointingHandCursor)
+        self.btn_exportar_stock.setStyleSheet(estilos.BOTON_SECUNDARIO)
+        self.btn_exportar_stock.clicked.connect(self.exportar_stock)
+        self.btn_exportar_stock.setEnabled(False)
+        filtros_layout.addWidget(self.btn_exportar_stock)
+
         filtros_layout.addStretch()
 
         layout.addLayout(filtros_layout)
@@ -174,10 +216,10 @@ class ReportesView(QWidget):
 
     def generar_reporte_stock(self):
         umbral = self.spin_umbral.value()
-        productos = reporte_bajo_stock(umbral)
+        self.stock_actual = reporte_bajo_stock(umbral)
 
         self.tabla_stock.setRowCount(0)
-        for fila_idx, prod in enumerate(productos):
+        for fila_idx, prod in enumerate(self.stock_actual):
             sku, nombre, categoria, talla, color, stock, proveedor = prod
             self.tabla_stock.insertRow(fila_idx)
             self.tabla_stock.setItem(fila_idx, 0, QTableWidgetItem(sku))
@@ -191,3 +233,25 @@ class ReportesView(QWidget):
             self.tabla_stock.setItem(fila_idx, 5, item_stock)
 
             self.tabla_stock.setItem(fila_idx, 6, QTableWidgetItem(proveedor or "-"))
+
+        self.btn_exportar_stock.setEnabled(len(self.stock_actual) > 0)
+
+    def exportar_stock(self):
+        if not self.stock_actual:
+            QMessageBox.information(self, "Sin datos", "Genera el reporte antes de exportarlo.")
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_sugerido = f"reporte_bajo_stock_{timestamp}.csv"
+
+        ruta_archivo, _ = QFileDialog.getSaveFileName(
+            self, "Guardar reporte de bajo stock", nombre_sugerido, "Archivo CSV (*.csv)"
+        )
+        if not ruta_archivo:
+            return
+
+        ok, resultado = exportar_bajo_stock_a_csv(self.stock_actual, ruta_archivo)
+        if ok:
+            QMessageBox.information(self, "Reporte exportado", f"El reporte se guardó exitosamente en:\n{resultado}")
+        else:
+            QMessageBox.warning(self, "Error al exportar", resultado)

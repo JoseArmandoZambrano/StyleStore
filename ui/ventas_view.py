@@ -1,12 +1,15 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
-    QSpinBox, QListWidget, QListWidgetItem
+    QSpinBox, QTabWidget
 )
 from PyQt5.QtCore import Qt
 
 from models.producto_model import obtener_productos
-from models.venta_model import obtener_metodos_pago, registrar_venta
+from models.venta_model import (
+    obtener_metodos_pago, registrar_venta, obtener_ventas,
+    obtener_detalle_venta, reembolsar_venta
+)
 from models.cliente_model import obtener_clientes
 from ui import estilos
 
@@ -15,35 +18,57 @@ class VentasView(QWidget):
     def __init__(self):
         super().__init__()
         self.setStyleSheet(f"background-color: {estilos.FONDO};")
-        self.carrito = []  # lista de dicts: id_producto, sku, nombre, cantidad, precio_unitario, subtotal
+        self.carrito = []
         self.init_ui()
-        self.cargar_datos_iniciales()
 
     def init_ui(self):
         layout_general = QVBoxLayout(self)
         layout_general.setContentsMargins(28, 28, 28, 20)
         layout_general.setSpacing(10)
 
-        # ---- Encabezado ----
         titulo_box = QVBoxLayout()
         titulo_box.setSpacing(2)
         meta = QLabel("SALES MANAGEMENT")
         meta.setStyleSheet(estilos.META_PAGINA)
         titulo_box.addWidget(meta)
-        titulo = QLabel("New Sale")
+        titulo = QLabel("Sales")
         titulo.setStyleSheet(estilos.TITULO_PAGINA)
         titulo_box.addWidget(titulo)
-        subtitulo = QLabel("Process a transaction and update inventory automatically.")
+        subtitulo = QLabel("Process transactions and manage your sales history.")
         subtitulo.setStyleSheet(estilos.SUBTITULO_PAGINA)
         titulo_box.addWidget(subtitulo)
         layout_general.addLayout(titulo_box)
         layout_general.addSpacing(6)
 
-        # ---- Dos columnas: carrito | resumen ----
-        columnas_layout = QHBoxLayout()
+        tabs = QTabWidget()
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; }}
+            QTabBar::tab {{
+                background: white; border: 1px solid {estilos.BORDE};
+                padding: 8px 18px; margin-right: 4px; border-radius: 8px 8px 0 0;
+                font-size: 13px; color: #666;
+            }}
+            QTabBar::tab:selected {{ background: {estilos.VERDE_OSCURO}; color: white; }}
+        """)
+        tabs.addTab(self._crear_tab_nueva_venta(), "New Sale")
+        tabs.addTab(self._crear_tab_historial(), "Sales History")
+        tabs.currentChanged.connect(self._al_cambiar_tab)
+
+        layout_general.addWidget(tabs)
+
+    def _al_cambiar_tab(self, indice):
+        if indice == 0:
+            self.cargar_datos_iniciales()
+        else:
+            self.cargar_historial_ventas()
+
+    # ===================== TAB 1: Nueva venta =====================
+    def _crear_tab_nueva_venta(self):
+        widget = QWidget()
+        columnas_layout = QHBoxLayout(widget)
+        columnas_layout.setContentsMargins(0, 16, 0, 0)
         columnas_layout.setSpacing(16)
 
-        # ===== Columna izquierda: buscar producto + carrito =====
         col_izquierda = QVBoxLayout()
 
         buscador_layout = QHBoxLayout()
@@ -87,7 +112,6 @@ class VentasView(QWidget):
         col_izquierda.addWidget(tarjeta_carrito)
         columnas_layout.addLayout(col_izquierda, stretch=3)
 
-        # ===== Columna derecha: resumen de la orden =====
         tarjeta_resumen = QWidget()
         tarjeta_resumen.setStyleSheet(estilos.TARJETA)
         resumen_layout = QVBoxLayout(tarjeta_resumen)
@@ -137,10 +161,10 @@ class VentasView(QWidget):
         tarjeta_resumen.setMaximumWidth(300)
         columnas_layout.addWidget(tarjeta_resumen, stretch=2)
 
-        layout_general.addLayout(columnas_layout)
+        self.cargar_datos_iniciales()
+        return widget
 
     def cargar_datos_iniciales(self):
-        # Productos disponibles
         self.combo_producto.clear()
         self.productos_disponibles = obtener_productos(solo_activos=True)
         for prod in self.productos_disponibles:
@@ -148,13 +172,11 @@ class VentasView(QWidget):
             texto = f"{nombre} ({talla}, {color}) - ${precio_venta:.2f} - Stock: {stock}"
             self.combo_producto.addItem(texto, id_producto)
 
-        # Clientes
         self.combo_cliente.clear()
         self.combo_cliente.addItem("Sin cliente asociado", None)
         for id_cliente, nombre, apellido, *_ in obtener_clientes():
             self.combo_cliente.addItem(f"{nombre} {apellido or ''}".strip(), id_cliente)
 
-        # Métodos de pago
         self.combo_pago.clear()
         for id_pago, tipo_pago in obtener_metodos_pago():
             self.combo_pago.addItem(tipo_pago, id_pago)
@@ -165,15 +187,12 @@ class VentasView(QWidget):
             return
 
         cantidad = self.spin_cantidad.value()
-
-        # Buscar datos del producto seleccionado
         producto = next((p for p in self.productos_disponibles if p[0] == id_producto), None)
         if producto is None:
             return
 
         _, sku, nombre, categoria, talla, color, precio_venta, stock, *_ = producto
 
-        # Revisar si ya está en el carrito, sumar cantidad
         for item in self.carrito:
             if item["id_producto"] == id_producto:
                 item["cantidad"] += cantidad
@@ -235,6 +254,72 @@ class VentasView(QWidget):
             QMessageBox.information(self, "Venta registrada", f"Venta #{resultado} registrada exitosamente.\nTotal: ${total:.2f}")
             self.carrito = []
             self.actualizar_tabla_carrito()
-            self.cargar_datos_iniciales()  # refresca stock disponible
+            self.cargar_datos_iniciales()
         else:
             QMessageBox.warning(self, "Error al procesar venta", resultado)
+
+    # ===================== TAB 2: Historial / Reembolsos =====================
+    def _crear_tab_historial(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 16, 0, 0)
+
+        tarjeta = QWidget()
+        tarjeta.setStyleSheet(estilos.TARJETA)
+        tarjeta_layout = QVBoxLayout(tarjeta)
+        tarjeta_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.tabla_historial = QTableWidget()
+        self.tabla_historial.setColumnCount(7)
+        self.tabla_historial.setHorizontalHeaderLabels(
+            ["ID Venta", "Fecha", "Cliente", "Items", "Total", "Pago", "Reembolsar"]
+        )
+        self.tabla_historial.setStyleSheet(estilos.TABLA)
+        self.tabla_historial.setShowGrid(False)
+        self.tabla_historial.verticalHeader().setVisible(False)
+        self.tabla_historial.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabla_historial.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.tabla_historial.verticalHeader().setDefaultSectionSize(40)
+        tarjeta_layout.addWidget(self.tabla_historial)
+
+        layout.addWidget(tarjeta)
+
+        self.cargar_historial_ventas()
+        return widget
+
+    def cargar_historial_ventas(self):
+        ventas = obtener_ventas()
+        self.tabla_historial.setRowCount(0)
+        for fila_idx, venta in enumerate(ventas):
+            id_venta, fecha, cliente, total, metodo_pago, items = venta
+            self.tabla_historial.insertRow(fila_idx)
+            self.tabla_historial.setItem(fila_idx, 0, QTableWidgetItem(str(id_venta)))
+            self.tabla_historial.setItem(fila_idx, 1, QTableWidgetItem(str(fecha)))
+            self.tabla_historial.setItem(fila_idx, 2, QTableWidgetItem(cliente))
+            self.tabla_historial.setItem(fila_idx, 3, QTableWidgetItem(str(items)))
+            self.tabla_historial.setItem(fila_idx, 4, QTableWidgetItem(f"${total:.2f}"))
+            self.tabla_historial.setItem(fila_idx, 5, QTableWidgetItem(metodo_pago or "-"))
+
+            btn_reembolsar = QPushButton("Reembolsar")
+            btn_reembolsar.setCursor(Qt.PointingHandCursor)
+            btn_reembolsar.setStyleSheet(estilos.BOTON_PELIGRO)
+            btn_reembolsar.clicked.connect(lambda checked, vid=id_venta: self.confirmar_reembolso(vid))
+            self.tabla_historial.setCellWidget(fila_idx, 6, btn_reembolsar)
+
+    def confirmar_reembolso(self, id_venta):
+        detalle = obtener_detalle_venta(id_venta)
+        texto_detalle = "\n".join([f"  • {nombre} x{cantidad}" for _, nombre, cantidad, *_ in detalle])
+
+        respuesta = QMessageBox.question(
+            self, "Confirmar reembolso",
+            f"¿Reembolsar la venta #{id_venta}?\n\nProductos:\n{texto_detalle}\n\n"
+            "Esta acción restaurará el inventario y no se puede deshacer.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if respuesta == QMessageBox.Yes:
+            ok, mensaje = reembolsar_venta(id_venta)
+            if ok:
+                QMessageBox.information(self, "Reembolso exitoso", mensaje)
+                self.cargar_historial_ventas()
+            else:
+                QMessageBox.warning(self, "Error al reembolsar", mensaje)
